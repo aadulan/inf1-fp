@@ -1,0 +1,132 @@
+-- Informatics 1 Functional Programming
+-- August 2013
+
+import Test.QuickCheck( quickCheck, 
+                        Arbitrary( arbitrary ),
+                        oneof, elements, sized  )
+import Control.Monad -- defines liftM, liftM2, used below
+
+-- Question 1
+
+-- 1a
+
+f :: [(Int,Int)] -> [Int]
+f xs = [ if even x then z else y |(x,(y,z)) <- zip[1..length xs] xs]
+
+test1a = f [(1,2),(5,7),(3,8),(4,9)]  ==  [1,7,3,9] &&
+         f [(1,2)]                    == [1] &&
+         f []                         ==  []
+
+-- 1b
+
+g :: [(Int,Int)] -> [Int]
+g [] = []
+g [(x,y)] =[x]
+g ((x,y):(a,b):xs) = x:b: g xs
+
+test1b = g [(1,2),(5,7),(3,8),(4,9)]  ==  [1,7,3,9] &&
+         g [(1,2)]                    ==  [1] &&
+         g []                         ==  []
+
+-- Question 2
+
+-- 2a
+
+p :: [Int] -> Int
+p xs =  product[3* x | x<- xs , x>0 && odd x]
+
+test2a = p [1,6,-15,11,-9] == 99 &&
+         p [3,6,9,12,-9,9] == 6561 &&
+         p []              == 1 &&
+         p [-1,4,-15]      == 1
+
+-- 2b
+
+q :: [Int] -> Int
+q [] = 1
+q (x:xs) | odd x && x >0 = (3* x) * q xs
+         | otherwise = q xs
+
+test2b = q [1,6,-15,11,-9] == 99 &&
+         q [3,6,9,12,-9,9] == 6561 &&
+         q []              == 1 &&
+         q [-1,4,-15]      == 1
+
+-- 2c
+
+r :: [Int] -> Int
+r xs  =  foldr (*) 1 (map (\x -> x *3) (filter (\x -> odd x && x>0 ) xs))
+
+test2c = r [1,6,-15,11,-9] == 99 &&
+         r [3,6,9,12,-9,9] == 6561 &&
+         r []              == 1 &&
+         r [-1,4,-15]      == 1
+
+test2 = test2a && test2b &&test2c
+
+-- Question 3
+
+data Prop = X
+          | F
+          | T
+          | Not Prop
+          | Prop :<->: Prop
+          deriving (Eq, Ord)
+
+-- turns a Prop into a string approximating mathematical notation
+
+showProp :: Prop -> String
+showProp X            =  "X"
+showProp F            =  "F"
+showProp T            =  "T"
+showProp (Not p)      =  "(~" ++ showProp p ++ ")"
+showProp (p :<->: q)  =  "(" ++ showProp p ++ "<->" ++ showProp q ++ ")"
+
+-- For QuickCheck
+
+instance Show Prop where
+    show  =  showProp
+
+instance Arbitrary Prop where
+    arbitrary  =  sized prop
+        where
+          prop n | n <= 0     =  atom
+                 | otherwise  =  oneof [ atom
+                                       , liftM Not subform
+                                       , liftM2 (:<->:) subform subform
+                                       ]
+                 where
+                   atom = oneof [elements [X,F,T]]
+                   subform  =  prop (n `div` 2)
+
+-- 3a
+
+eval :: Prop -> Bool -> Bool
+eval X x = x
+eval F _ = False
+eval T _ = True
+eval (Not x) y = not( eval x y)
+eval (p :<->: q) x = ( not( eval p x)  || eval q x)  && (not (eval q x) || eval p x)
+
+test3a = eval (Not T) True                     ==  False &&
+         eval (Not X) False                    ==  True &&
+         eval (Not X :<->: Not (Not X)) True   ==  False &&
+         eval (Not X :<->: Not (Not X)) False  ==  False &&
+         eval (Not (Not X :<->: F)) True       ==  False &&
+         eval (Not (Not X :<->: F)) False      ==  True
+-- 3b
+
+simplify :: Prop -> Prop
+simplify X = X
+simplify F = F
+simplify T = T 
+simplify (Not X) = Not X
+simplify (Not x) =  Not (simplify x)
+simplify (Not (Not x)) = simplify x
+simplify (p :<->: q)| simplify p == T = simplify q
+                    | simplify p == F = Not (simplify p)
+                    | simplify q == T = simplify p 
+                    | simplify q == F = Not (simplify p)
+                    | simplify p == simplify q = simplify p
+                    |otherwise = simplify( simplify p :<->: simplify q)
+ 
